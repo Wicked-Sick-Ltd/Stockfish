@@ -159,3 +159,15 @@ project][lc0-data-link], which is made available under the [Open Database Licens
 [license-badge]:      https://img.shields.io/github/license/official-stockfish/Stockfish?style=for-the-badge&label=license&color=success
 [release-badge]:      https://img.shields.io/github/v/release/official-stockfish/Stockfish?style=for-the-badge&label=official%20release
 [website-badge]:      https://img.shields.io/website?style=for-the-badge&down_color=red&down_message=Offline&label=website&up_color=success&up_message=Online&url=https%3A%2F%2Fstockfishchess.org
+
+<!-- repository-guidance:begin -->
+## Contributing and agent guidance
+
+- [Contributor guide](CONTRIBUTING.md): development workflow and validation.
+- [Agent instructions](AGENTS.md): shared guidance for Codex and other coding agents.
+- [Security policy](SECURITY.md): private vulnerability reporting.
+
+## Repository license
+
+Existing upstream license terms and notices remain in force; see [Copying.txt](Copying.txt).
+<!-- repository-guidance:end -->
