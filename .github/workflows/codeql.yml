@@ -53,7 +53,23 @@ jobs:
         working-directory: src
         run: make -j build
 
+      # This repository has CodeQL "default setup" enabled, which owns the
+      # Code Scanning results and rejects SARIF uploads from this advanced
+      # workflow ("CodeQL analyses from advanced configurations cannot be
+      # processed when the default setup is enabled"). Keep the build +
+      # analysis as a CI check, but publish the SARIF as an artifact instead
+      # of uploading it to Code Scanning.
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4.35.2
         with:
           category: "/language:${{matrix.language}}"
+          upload: never
+          upload-database: false
+          output: ${{ runner.temp }}/codeql-results
+
+      - name: Upload CodeQL SARIF
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: codeql-sarif-${{ matrix.language }}
+          path: ${{ runner.temp }}/codeql-results/*.sarif
+          if-no-files-found: error
