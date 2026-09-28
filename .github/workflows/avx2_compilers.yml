@@ -67,7 +67,14 @@ jobs:
           fi
 
           apt-get update
-          apt-get install -y curl git make
+          apt-get install -y git make
+
+          # scripts/net.sh only needs one of wget or curl. The Bullseye images
+          # already ship wget, and their archived curl package conflicts with
+          # the newer libcurl4 baked into the image.
+          if ! command -v wget >/dev/null 2>&1 && ! command -v curl >/dev/null 2>&1; then
+            apt-get install -y curl
+          fi
 
       - name: Set up Clang
         if: ${{ matrix.is_clang && matrix.image == 'ubuntu:rolling' }}
