@@ -53,7 +53,13 @@ jobs:
           EOF
                 ;;
               bullseye)
-                echo "Debian Bullseye detected. Disabling repository expiry checks..."
+                # bullseye-security was purged from deb.debian.org before it
+                # reached archive.debian.org, so only the main suite is usable.
+                echo "Debian Bullseye detected. Switching to archive repositories..."
+                rm -f /etc/apt/sources.list.d/debian.sources
+                cat > /etc/apt/sources.list << EOF
+          deb http://archive.debian.org/debian bullseye main contrib non-free
+          EOF
                 ;;
             esac
             echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99-ignore-valid-until
