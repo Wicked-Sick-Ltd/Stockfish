@@ -49,11 +49,13 @@ jobs:
 
       - name: Compute prerelease metadata
         id: prerelease_metadata
+        env:
+          REF_NAME: ${{ github.ref_name }}
         run: |
           COMMIT_SHA=$(git rev-parse HEAD | cut -c 1-8)
           COMMIT_DATE=$(git show -s --date=format:'%Y%m%d' --format=%cd HEAD)
 
-          if [[ "${{ github.ref_name }}" == 'master' && "$CHANGES" == '0' && "$OFFICIAL_RELEASE" == 'false' ]]; then
+          if [[ "$REF_NAME" == 'master' && "$CHANGES" == '0' && "$OFFICIAL_RELEASE" == 'false' ]]; then
             echo "release_name=Stockfish dev-$COMMIT_DATE-$COMMIT_SHA" >> $GITHUB_OUTPUT
             echo "release_tag=stockfish-dev-$COMMIT_DATE-$COMMIT_SHA" >> $GITHUB_OUTPUT
           else
@@ -63,10 +65,13 @@ jobs:
 
       - name: Get commits in this push
         id: recent_commits
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          REPOSITORY: ${{ github.repository }}
         run: |
           COMMITS=$(git log \
-            --format="- [\`%h\`](https://github.com/${{ github.repository }}/commit/%H) *%s*" \
-            ${{ github.event.before }}..HEAD)
+            --format="- [\`%h\`](https://github.com/${REPOSITORY}/commit/%H) *%s*" \
+            "$BEFORE_SHA"..HEAD)
           echo "COMMITS<<EOF" >> $GITHUB_OUTPUT
           echo "$COMMITS" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
@@ -75,15 +80,17 @@ jobs:
         if: steps.prerelease_metadata.outputs.release_tag != ''
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
         run: |
-          COMMIT_SHA_TAG=$(gh release list --repo "${{ github.repository }}" --exclude-drafts --limit 100 --json tagName,isPrerelease | jq -r 'map(select(.isPrerelease)) | first | .tagName // "null"')
+          COMMIT_SHA_TAG=$(gh release list --repo "$REPOSITORY" --exclude-drafts --limit 100 --json tagName,isPrerelease | jq -r 'map(select(.isPrerelease)) | first | .tagName // "null"')
           echo "COMMIT_SHA_TAG=$COMMIT_SHA_TAG" >> "$GITHUB_ENV"
 
       - name: Delete Previous Dev Prerelease
         if: steps.prerelease_metadata.outputs.release_tag != '' && env.COMMIT_SHA_TAG != 'null'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release delete "${{ env.COMMIT_SHA_TAG }}" --repo "${{ github.repository }}" --cleanup-tag
+          REPOSITORY: ${{ github.repository }}
+        run: gh release delete "$COMMIT_SHA_TAG" --repo "$REPOSITORY" --cleanup-tag
 
       - name: Create Draft Prerelease
         if: steps.prerelease_metadata.outputs.release_tag != ''
@@ -207,4 +214,6 @@ jobs:
       - name: Publish Draft Prerelease
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release edit "${{ needs.Prerelease.outputs.release_tag }}" --repo "${{ github.repository }}" --draft=false --prerelease
+          RELEASE_TAG: ${{ needs.Prerelease.outputs.release_tag }}
+          REPOSITORY: ${{ github.repository }}
+        run: gh release edit "$RELEASE_TAG" --repo "$REPOSITORY" --draft=false --prerelease
