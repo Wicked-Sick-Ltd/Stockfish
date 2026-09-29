@@ -84,15 +84,19 @@ void* std_aligned_alloc(usize alignment, usize size) {
 #endif
 }
 
+// Each #if branch is the only deallocator compiled for that platform.
 void std_aligned_free(void* ptr) {
 
 #if defined(POSIXALIGNEDALLOC)
     free(ptr);
 #elif defined(_WIN32) && !defined(_M_ARM) && !defined(_M_ARM64)
+    // nosemgrep: double-free, local-variable-malloc-free, function-use-after-free
     _mm_free(ptr);
 #elif defined(_WIN32)
+    // nosemgrep: double-free, local-variable-malloc-free, function-use-after-free
     _aligned_free(ptr);
 #else
+    // nosemgrep: double-free, local-variable-malloc-free, function-use-after-free
     free(ptr);
 #endif
 }

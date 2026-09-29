@@ -1,7 +1,8 @@
-# This workflow will run clang-format and comment on the PR.
-# Because of security reasons, it is crucial that this workflow
-# executes no shell script nor runs make.
-# Read this before editing: https://securitylab.github.com/research/github-actions-preventing-pwn-requests/
+# This workflow runs clang-format and comments on the PR.
+# pull_request_target is what allows a comment on a fork PR, but the job must
+# not check out or execute that PR. Source bytes are read from the base
+# repository's refs/pull/<n>/head tree and passed to clang-format as data.
+# See https://securitylab.github.com/research/github-actions-preventing-pwn-requests/
 
 name: Clang-Format
 on:
@@ -17,6 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
+  contents: read
   pull-requests: write
 
 jobs:
@@ -24,9 +26,83 @@ jobs:
     name: Clang-Format
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Fetch PR sources without checking out untrusted code
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          python3 - << 'PY'
+          import json
+          import os
+          import pathlib
+          import re
+          import shutil
+          import subprocess
+          import sys
+
+          repo = os.environ["REPOSITORY"]
+          pr = os.environ["PR_NUMBER"]
+          if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
+              sys.exit("invalid repository")
+          if not re.fullmatch(r"[0-9]+", pr):
+              sys.exit("invalid pull request number")
+
+          def gh_api(path, raw=False):
+              cmd = ["gh", "api"]
+              if raw:
+                  cmd += ["-H", "Accept: application/vnd.github.raw"]
+              cmd.append(path)
+              return subprocess.check_output(cmd)
+
+          root = pathlib.Path("format-check")
+          if root.exists():
+              shutil.rmtree(root)
+          root.mkdir()
+
+          tree = json.loads(
+              gh_api(f"repos/{repo}/git/trees/refs/pull/{pr}/head?recursive=1")
+          )
+          if tree.get("truncated"):
+              sys.exit("git tree listing was truncated")
+
+          # Same source set as jidicula/clang-format-action's default include.
+          include = re.compile(
+              r"^.*\.((((c|C)(c|pp|xx|\+\+)?$)|((h|H)h?(pp|xx|\+\+)?$))|(ino|pde|proto|cu))$"
+          )
+          safe_path = re.compile(r"[A-Za-z0-9_./+-]+")
+          sha_re = re.compile(r"[0-9a-fA-F]{40}")
+
+          count = 0
+          for entry in tree.get("tree", []):
+              if entry.get("type") != "blob":
+                  continue
+              if entry.get("mode") not in ("100644", "100755"):
+                  continue
+              path = entry.get("path", "")
+              name = path.rsplit("/", 1)[-1]
+              is_style = name == ".clang-format"
+              if not is_style and (not include.fullmatch(path) or "incbin" in path):
+                  continue
+              if (
+                  not safe_path.fullmatch(path)
+                  or path.startswith("/")
+                  or ".." in path.split("/")
+              ):
+                  print(f"skipping unsafe path: {path}", file=sys.stderr)
+                  continue
+              blob_sha = entry.get("sha", "")
+              if not sha_re.fullmatch(blob_sha):
+                  sys.exit(f"invalid blob sha for {path}")
+              payload = gh_api(f"repos/{repo}/git/blobs/{blob_sha}", raw=True)
+              dest = root / path
+              dest.parent.mkdir(parents=True, exist_ok=True)
+              dest.write_bytes(payload)
+              count += 1
+
+          print(f"Fetched {count} files for clang-format")
+          PY
 
       - name: Run clang-format style check
         uses: jidicula/clang-format-action@654a770daa28443dd111d133e4083e21c1075674 # v4.18.0
@@ -34,7 +110,8 @@ jobs:
         continue-on-error: true
         with:
           clang-format-version: "20"
-          exclude-regex: "incbin"
+          check-path: format-check
+          exclude-regex: incbin
 
       - name: Comment on PR
         if: steps.clang-format.outcome == 'failure'
