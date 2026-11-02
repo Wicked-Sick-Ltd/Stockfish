@@ -6,6 +6,7 @@ jobs:
     name: ${{ matrix.config.name }}
     runs-on: ${{ matrix.config.os }}
     env:
+      WORKSPACE: ${{ github.workspace }}
       COMPCXX: ${{ matrix.config.compiler }}
       COMP: ${{ matrix.config.comp }}
       CXXFLAGS: "-Werror"
@@ -190,7 +191,7 @@ jobs:
             $COMPCXX -v
           else
             echo "$COMPCXX -v" > script.sh
-            docker run --rm --platform ${{ matrix.config.platform }} -v ${{ github.workspace }}:/app sf_builder
+            docker run --rm --platform ${{ matrix.config.platform }} -v "$WORKSPACE:/app" sf_builder
           fi
 
       - name: Test help target
@@ -368,7 +369,7 @@ jobs:
         if: matrix.config.run_ppc64_tests
         run: |
           echo "cd src && export LDFLAGS='-static' && make clean && make -j4 ARCH=ppc-64 build" > script.sh
-          docker run --rm --platform ${{ matrix.config.platform }} -v ${{ github.workspace }}:/app sf_builder
+          docker run --rm --platform ${{ matrix.config.platform }} -v "$WORKSPACE:/app" sf_builder
           ../tests/signature.sh $benchref
 
       # loongarch64 tests
@@ -377,21 +378,21 @@ jobs:
         if: matrix.config.run_loongarch64_tests
         run: |
           echo "cd src && export LDFLAGS='-static' && make clean && make -j4 ARCH=loongarch64 build" > script.sh
-          docker run --rm --platform ${{ matrix.config.platform }} -v ${{ github.workspace }}:/app sf_builder
+          docker run --rm --platform ${{ matrix.config.platform }} -v "$WORKSPACE:/app" sf_builder
           ../tests/signature.sh $benchref
 
       - name: Test loongarch64-lsx build
         if: matrix.config.run_loongarch64_tests
         run: |
           echo "cd src && export LDFLAGS='-static' && make clean && make -j4 ARCH=loongarch64-lsx build" > script.sh
-          docker run --rm --platform ${{ matrix.config.platform }} -v ${{ github.workspace }}:/app sf_builder
+          docker run --rm --platform ${{ matrix.config.platform }} -v "$WORKSPACE:/app" sf_builder
           ../tests/signature.sh $benchref
 
       - name: Test loongarch64-lasx build
         if: matrix.config.run_loongarch64_tests
         run: |
           echo "cd src && export LDFLAGS='-static' && make clean && make -j4 ARCH=loongarch64-lasx build" > script.sh
-          docker run --rm --platform ${{ matrix.config.platform }} -v ${{ github.workspace }}:/app sf_builder
+          docker run --rm --platform ${{ matrix.config.platform }} -v "$WORKSPACE:/app" sf_builder
           ../tests/signature.sh $benchref
 
       # Other tests

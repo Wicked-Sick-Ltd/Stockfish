@@ -42,8 +42,10 @@ jobs:
         run: include-what-you-use --version
 
       - name: Check includes
+        env:
+          WORKSPACE: ${{ github.workspace }}
         run: >
           make analyze
           COMP=clang
           CXX=include-what-you-use
-          CXXFLAGS="-stdlib=libc++ -Xiwyu --comment_style=long -Xiwyu --mapping='${{ github.workspace }}/Stockfish/.github/ci/libcxx17.imp' -Xiwyu --error"
+          CXXFLAGS="-stdlib=libc++ -Xiwyu --comment_style=long -Xiwyu --mapping='$WORKSPACE/Stockfish/.github/ci/libcxx17.imp' -Xiwyu --error"
