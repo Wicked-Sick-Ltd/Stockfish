@@ -16,7 +16,11 @@ on:
       - completed
 
 concurrency:
-  group: clang-format-comment-${{ github.event.workflow_run.head_repository.full_name }}-${{ github.event.workflow_run.head_branch }}
+  # Number, not head branch: a branch opened against both master and
+  # wicked-main is two pull requests and must not cancel the other comment.
+  # When pull_requests is empty, head_sha still separates commits. A re-run of
+  # an older commit is refused below once the pull request head has moved.
+  group: clang-format-comment-${{ github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.head_sha }}
   cancel-in-progress: true
 
 permissions:
@@ -114,23 +118,13 @@ jobs:
 
           pr_json=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr}")
           pr_head=$(normalize_sha "$(printf '%s' "$pr_json" | jq -r '.head.sha // empty')")
-          pr_merge=$(normalize_sha "$(printf '%s' "$pr_json" | jq -r '.merge_commit_sha // empty')")
           is_sha "$pr_head" || { echo "pull request head sha missing" >&2; exit 1; }
-          if [ -n "$pr_merge" ] && ! is_sha "$pr_merge"; then
-            echo "pull request merge sha malformed" >&2
+          # workflow_run.head_sha is the pull request head at the time of that
+          # run. Require it to still be the pull request's current head so a
+          # re-run of an older check cannot restore or delete the latest comment.
+          if [ "$trusted_sha" != "$pr_head" ]; then
+            echo "workflow run sha is not the current pull request head" >&2
             exit 1
-          fi
-          # workflow_run.head_sha is the pull request head commit. The check
-          # workflow records that same SHA. GITHUB_SHA in the check job is the
-          # synthetic merge commit and must not be used here.
-          # An artifact that names some other pull request fails this check.
-          # When GitHub already attached this run to a pull request and that
-          # number matches, accept a head sha the API has not published yet.
-          if [ "$trusted_sha" != "$pr_head" ] && [ "$trusted_sha" != "$pr_merge" ]; then
-            if [ -z "$EVENT_PR" ] || [ "$EVENT_PR" != "$pr" ]; then
-              echo "workflow run sha is not this pull request" >&2
-              exit 1
-            fi
           fi
 
           {
