@@ -120,11 +120,12 @@ jobs:
             echo "pull request merge sha malformed" >&2
             exit 1
           fi
-          # workflow_run.head_sha is github.sha from the pull_request run, which
-          # is the merge commit when GitHub could create one, otherwise the head.
+          # workflow_run.head_sha is the pull request head commit. The check
+          # workflow records that same SHA. GITHUB_SHA in the check job is the
+          # synthetic merge commit and must not be used here.
           # An artifact that names some other pull request fails this check.
           # When GitHub already attached this run to a pull request and that
-          # number matches, accept a merge sha the API has not published yet.
+          # number matches, accept a head sha the API has not published yet.
           if [ "$trusted_sha" != "$pr_head" ] && [ "$trusted_sha" != "$pr_merge" ]; then
             if [ -z "$EVENT_PR" ] || [ "$EVENT_PR" != "$pr" ]; then
               echo "workflow run sha is not this pull request" >&2
