@@ -16,15 +16,12 @@ on:
       - completed
 
 concurrency:
-  # Include the head SHA. A group of only the pull request number lets a
-  # re-run of an older commit cancel the in-progress comment for the current
-  # head; the older run then fails the head check and neither job comments.
-  # Distinct commits do not cancel each other. The head check below makes a
-  # late older run a no-op. The pull request number keeps two pull requests
-  # that share a branch (master and wicked-main) apart; head_branch covers
-  # the case where workflow_run.pull_requests is empty.
-  group: clang-format-comment-${{ github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.head_branch }}-${{ github.event.workflow_run.head_sha }}
-  cancel-in-progress: true
+  # One group per triggering run. Do not cancel across runs: a shared group
+  # can cancel the comment for the current head, and the run that replaced it
+  # may then fail the head check, so no comment is posted. The head check
+  # below makes an older run a no-op. Comment create/delete is idempotent.
+  group: clang-format-comment-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
 
 permissions:
   actions: read
