@@ -1,13 +1,26 @@
-# This workflow will run clang-format and comment on the PR.
-# Because of security reasons, it is crucial that this workflow
-# executes no shell script nor runs make.
-# Read this before editing: https://securitylab.github.com/research/github-actions-preventing-pwn-requests/
+# Format-check the pull request with a read-only token.
+#
+# This job used to run on pull_request_target and check out
+# github.event.pull_request.head.sha. That is actions/untrusted-checkout/high:
+# the checkout is privileged (write token, secrets) even when no later step is
+# a known poisonable command. pull_request is unprivileged for fork PRs.
+# Comments are posted by clang-format-comment.yml, which only reads the
+# artifact uploaded here and never checks out the pull request.
+#
+# Keep this file's trigger limited to pull_request. Adding workflow_run (or
+# pull_request_target) to this file makes the checkout look privileged to
+# CodeQL, because those events are checkout triggers.
+#
+# https://securitylab.github.com/research/github-actions-preventing-pwn-requests/
+# https://codeql.github.com/codeql-query-help/actions/actions-untrusted-checkout-high/
 
 name: Clang-Format
 on:
-  pull_request_target:
+  pull_request:
     branches:
+      # master matches upstream Stockfish. wicked-main is this fork's default.
       - "master"
+      - "wicked-main"
     paths:
       - "**.cpp"
       - "**.h"
@@ -17,16 +30,18 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  pull-requests: write
+  contents: read
 
 jobs:
   Clang-Format:
     name: Clang-Format
     runs-on: ubuntu-22.04
     steps:
+      # Default pull_request checkout is the merge ref. No head.sha ref, so
+      # this step is not a PR-head checkout. Credentials are not left in .git.
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
 
       - name: Run clang-format style check
         uses: jidicula/clang-format-action@654a770daa28443dd111d133e4083e21c1075674 # v4.18.0
@@ -36,27 +51,49 @@ jobs:
           clang-format-version: "20"
           exclude-regex: "incbin"
 
-      - name: Comment on PR
-        if: steps.clang-format.outcome == 'failure'
-        uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
-        with:
-          message: |
-            clang-format 20 needs to be run on this PR.
-            If you do not have clang-format installed, the maintainer will run it when merging.
-            For the exact version please see https://packages.ubuntu.com/questing/clang-format-20.
-            An easier way to install it might be through https://apt.llvm.org/#llvmsh.
+      # The result file is written outside the checkout. A pull request can
+      # contain clang-format-result/ as a symlink or a pre-filled file; the
+      # comment job treats the artifact as untrusted either way.
+      - name: Record clang-format result
+        if: steps.clang-format.outcome == 'success' || steps.clang-format.outcome == 'failure'
+        env:
+          OUTCOME: ${{ steps.clang-format.outcome }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          # workflow_run.head_sha is this value, not GITHUB_SHA. On pull_request,
+          # GITHUB_SHA is the synthetic merge commit.
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          case "$OUTCOME" in
+            success|failure) ;;
+            *) echo "unexpected clang-format outcome" >&2; exit 1 ;;
+          esac
+          case "$PR_NUMBER" in
+            ''|*[!0-9]*|0*) echo "unexpected pull request number" >&2; exit 1 ;;
+          esac
+          case "$HEAD_SHA" in
+            *[!0-9a-fA-F]*|'') echo "unexpected head sha" >&2; exit 1 ;;
+          esac
+          if [ "${#HEAD_SHA}" -ne 40 ]; then
+            echo "unexpected head sha length" >&2
+            exit 1
+          fi
+          dir="${RUNNER_TEMP}/clang-format-result"
+          rm -rf "$dir"
+          mkdir -p "$dir"
+          {
+            printf '%s\n' "$OUTCOME"
+            printf '%s\n' "$PR_NUMBER"
+            printf '%s\n' "$HEAD_SHA"
+          } > "$dir/result"
 
-            _(execution **${{ github.run_id }}** / attempt **${{ github.run_attempt }}**)_
-          comment-tag: execution
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Comment on PR
-        if: steps.clang-format.outcome != 'failure'
-        uses: thollander/actions-comment-pull-request@24bffb9b452ba05a4f3f77933840a6a841d1b32b # v3.0.1
+      - name: Upload clang-format result
+        if: >-
+          success() &&
+          (steps.clang-format.outcome == 'success' || steps.clang-format.outcome == 'failure')
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          message: |
-            _(execution **${{ github.run_id }}** / attempt **${{ github.run_attempt }}**)_
-          create-if-not-exists: false
-          comment-tag: execution
-          mode: delete
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          name: clang-format-result
+          path: ${{ runner.temp }}/clang-format-result/result
+          if-no-files-found: error
+          retention-days: 1
