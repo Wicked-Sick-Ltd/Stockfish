@@ -104,6 +104,19 @@ Detailed compilation instructions for all platforms can be found in our
 [documentation][wiki-compile-link]. Our wiki also has information about
 the [UCI commands][wiki-uci-link] supported by Stockfish.
 
+## Cloud agent environment
+
+Wicked Sick cloud agents bootstrap this fork with `bash .cursor/install.sh`
+(see `.cursor/environment.json`). That script installs g++, clang, make, and
+the small tools the shell tests use, then runs `make -C src net` so the
+default NNUE file is present. The net stays untracked. A normal check is:
+
+```
+cd src
+make -j build ARCH=x86-64-avx2
+./stockfish bench
+```
+
 ## Terms of use
 
 Stockfish is free and distributed under the

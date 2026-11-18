@@ -1,0 +1,4 @@
+{
+  "name": "Stockfish",
+  "install": "bash .cursor/install.sh"
+}
